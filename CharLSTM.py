@@ -77,7 +77,6 @@ class CharLSTM:
                 for sample in dataset[num_training_examples+examples_to_train_on]:
                     cost += self.validation_pass(sample)[0]
                 avg_cost = cost/batch_size
-
                 print("Cost: ", avg_cost)
                 if avg_cost > prev_cost:
                     strikes+=1
@@ -124,7 +123,7 @@ if __name__ == '__main__':
     data, lnd = parse_text_file(sys.argv[1], delim='\n|\.')
     for i in range(len(data)):
         data[i] = np.append(data[i], len(lnd))
-    m = CharLSTM([100,50,10], len(lnd)+1)
+    m = CharLSTM([100], len(lnd)+1)
     m.train(data)
     output_file = open('output' + datetime.now().strftime('%m-%d %H:%M'), 'w')
     for i in range(10):

@@ -76,7 +76,8 @@ class CharLSTM:
                 examples_to_train_on = np.random.choice(num_validation_examples, batch_size, replace=False)
                 for sample in dataset[num_training_examples+examples_to_train_on]:
                     cost += self.validation_pass(sample)[0]
-                avg_cost = cost//batch_size
+                avg_cost = cost/batch_size
+
                 print("Cost: ", avg_cost)
                 if avg_cost > prev_cost:
                     strikes+=1

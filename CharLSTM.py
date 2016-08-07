@@ -6,6 +6,7 @@ import theano.tensor as T
 from theano_lstm import *
 import numpy as np
 import sys
+import os
 import re
 import pickle
 from datetime import datetime
@@ -55,39 +56,44 @@ class CharLSTM:
         self.training_pass = theano.function([training_data], [cost], updates=updates + u, allow_input_downcast=True)
         self.validation_pass = theano.function([training_data], [cost], updates=updates, allow_input_downcast=True)
 
+    def validate(self, validation_set, minibatch_size):
+        examples_to_train_on = np.random.choice(len(validation_set), minibatch_size, replace=False)
+        cost = 0
+        for sample in validation_set[examples_to_train_on]:
+            cost += self.validation_pass(sample)[0]
+        return cost/minibatch_size
+
+
     # train the model on a numpy 2d array of character sequences
-    def train(self, dataset, batch_size=100, max_num_batches=5000):
+    def train(self, dataset, minibatch_size=100, max_num_batches=5000, output_dir="output", record_weights=True, record_samples=False):
+        if record_weights or record_samples:
+            os.mkdir(output_dir)
         print("Training...")
         num_training_examples = (len(dataset) * 3) // 4
         num_validation_examples = len(dataset) - num_training_examples
         prev_cost = sys.maxsize
         strikes=0
         for batch in range(1, max_num_batches):
-            examples_to_train_on = np.random.choice(num_training_examples, batch_size, replace=False)
+            examples_to_train_on = np.random.choice(num_training_examples, minibatch_size, replace=False)
+            cost = 0
             for sample in dataset[examples_to_train_on]:
-                self.training_pass(sample)
-            if batch % 100 == 0:
-                print("Minibatch ", batch * batch_size / num_training_examples)
-                params = []
-                for p in self.model.params:
-                    params += [p.get_value()]
-                pickle.dump(params, open('batch' + str(batch) + '.p', 'wb'))
-                cost = 0
-                examples_to_train_on = np.random.choice(num_validation_examples, batch_size, replace=False)
-                for sample in dataset[num_training_examples+examples_to_train_on]:
-                    cost += self.validation_pass(sample)[0]
-                avg_cost = cost/batch_size
-                print("Cost: ", avg_cost)
-                if avg_cost > prev_cost:
-                    strikes+=1
-                    print("Strike ",strikes)
-                    if strikes >= 5:
-                        print("Stopping training")
-                        return
-                else:
-                    strikes=0
-                    prev_cost = avg_cost
+                cost = self.training_pass(sample)
+            if batch % 10 == 0:
+                print("Minibatch ", batch * minibatch_size / num_training_examples)
+                print("Loss: ", cost)
+                
 
+            if batch % 10 == 0:
+                print("Validating...")
+                if record_weights:
+                    params = []
+                    for p in self.model.params:
+                        params += [p.get_value()]
+                    pickle.dump(params, open(output_dir + '/batch' + str(batch) + '.p', 'wb'))
+                if record_samples:
+                    output_file = open(output_dir + '/batch' + str(batch) + '.txt', 'w')
+                print("Average Error: ", self.validate(dataset[num_training_examples:], minibatch_size))
+                
 
 
 
@@ -123,8 +129,5 @@ if __name__ == '__main__':
     data, lnd = parse_text_file(sys.argv[1], delim='\n|\.')
     for i in range(len(data)):
         data[i] = np.append(data[i], len(lnd))
-    m = CharLSTM([100], len(lnd)+1)
-    m.train(data)
-    output_file = open('output' + datetime.now().strftime('%m-%d %H:%M'), 'w')
-    for i in range(10):
-        output_file.write(output_to_str(m.forward_pass(1000)[0], lnd) + '\n')
+    m = CharLSTM([100,50], len(lnd)+1)
+    m.train(data, output_dir='output' + datetime.now().strftime('%m-%d %H:%M'), record_weights=False)

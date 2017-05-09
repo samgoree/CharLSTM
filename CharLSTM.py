@@ -149,5 +149,8 @@ if __name__ == '__main__':
     data, lnd = parse_text_file(sys.argv[1], delim='\n|\.')
     for i in range(len(data)):
         data[i] = np.append(data[i], len(lnd))
-    m = CharLSTM([100,50], len(lnd)+1)
-    m.train(data, output_dir='output' + datetime.now().strftime('%m-%d %H:%M'), record_weights=False)
+    m = CharLSTM([100], len(lnd)+1)
+    m.train(data)
+    output_file = open('output' + datetime.now().strftime('%m-%d %H:%M'), 'w')
+    for i in range(10):
+        output_file.write(output_to_str(m.forward_pass(1000)[0], lnd) + '\n')

@@ -1,0 +1,14 @@
+TODO:
+
+Look up correct way to do training and validation
+When is the network sufficiently trained vs. in an escapable local minimum?
+
+actually use minibatches - how does updates actually work in theano?
+
+how do you catch ^C and stuff?
+
+Parameterize the number of characters to output at a time
+
+
+Other ideas:
+Midi to WAV neural net synth - http://bregman.dartmouth.edu/sites/default/files/AndySarroffMichaelCaseyICMC2014.pdf

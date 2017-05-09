@@ -37,24 +37,44 @@ class CharLSTM:
 
         self.forward_pass = theano.function([num_steps], [results[0].dimshuffle((1,0))[0]], updates=updates, allow_input_downcast=True)
 
-        training_data = T.vector('training data') # list of character values less than num_possible_characters
+        training_data = T.matrix('training data') # list of character values less than num_possible_characters
 
-        def step(prev_char, desired_output, *prev_hiddens):
+        def step_inner(prev_char, desired_output, *prev_hiddens):
             new_hiddens = self.model.forward(int_to_onehot(prev_char, num_possible_characters), prev_hiddens)
             prob_correct = new_hiddens[-1][desired_output]
             return [prob_correct] + new_hiddens[:-1]
 
-        # different call to scan that uses the training data as prior timesteps
-        results, updates = theano.scan(step, n_steps=training_data.shape[0], sequences=[dict(input=T.cast(T.concatenate(([0], training_data)), 'int32'), taps=[0,1])],
-        outputs_info=[None] + [dict(initial=layer.initial_hidden_state, taps=[-1]) for layer in self.model.layers if hasattr(layer, 'initial_hidden_state')])
+        # I have no idea whether nesting scan will work at all
+        def step_outer(training_sample, *initial_states):
+            print(list(initial_states))
+            # different call to scan that uses the training data as prior timesteps
+            results_inner, updates_inner = theano.scan(step_inner, n_steps=training_sample.shape[0], sequences=[dict(input=T.cast(T.concatenate(([0], training_sample)), 'int32'), taps=[0,1])],
+            outputs_info=[None] + list(initial_states))
+            return results_inner, updates_inner
 
-        prob_correct_v = results[0] # should be a vector of probabilities between 0 and 1
-        cost = -T.mean(T.log(prob_correct_v))
+        results_outer, updates_outer = theano.scan(step_outer, n_steps=training_data.shape[0], 
+            sequences=[training_data], 
+            non_sequences=[layer.initial_hidden_state for layer in self.model.layers if hasattr(layer, 'initial_hidden_state')],
+            outputs_info=[None, None])
+
+        results_inner = results[0] # this should be a list of each "results" from step_inner
+        updates_inner = results[1] # this should be a list of updates
+
+        # I want to find the zero position of each results vector in results_inner
+
+        prob_correct_v = results_inner[:][0] # should be a matrix of probabilities between 0 and 1
+        cost = -T.mean(T.log(prob_correct_v)) # mean should take the average across all dimensions
 
         u, gsums, xsums, lr, max_norm = create_optimization_updates(cost, self.model.params, method='adadelta')
 
-        self.training_pass = theano.function([training_data], [cost], updates=updates + u, allow_input_downcast=True)
-        self.validation_pass = theano.function([training_data], [cost], updates=updates, allow_input_downcast=True)
+        # combine all the updates into one dictionary
+        all_updates = {}
+        for d in updates_inner:
+            all_updates.update(d)
+        all_updates.update(updates_outer)
+
+        self.training_pass = theano.function([training_data], [cost], updates=all_updates + u, allow_input_downcast=True)
+        self.validation_pass = theano.function([training_data], [cost], updates=all_updates, allow_input_downcast=True)
 
     def validate(self, validation_set, minibatch_size):
         examples_to_train_on = np.random.choice(len(validation_set), minibatch_size, replace=False)
